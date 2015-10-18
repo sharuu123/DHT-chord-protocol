@@ -14,7 +14,7 @@ object project3 {
 
 		case class CreateTopology()
 		case class Join(nodeId: String) 
-		case class Search(hashvalue: BigInt)
+		case class Search(key: BigInt, sender: String)
 
 		println("project3 - Chord DHT")
 		class Master(numOfNodes: Int, numOfRequests: Int) extends Actor{
@@ -40,35 +40,50 @@ object project3 {
 			var fingertable: Array[String] = new Array[String](160)
 
 			// find id's successor
-			def findSuccessor(id: BigInt) = {
+			def findSuccessor(id: BigInt): String = {
 				var node: String = findPredecessor(id)
 				context.actorSelection("../"+node) ! "TellSuccessor"
 			}
 
-			def findPredecessor(id: BigInt) = {
-
+			def findPredecessor(id: BigInt): String = {
+				var node = myID
+				while(id < (sha1(node)) || id > fingertable(0)){
+					// node = node.successor
+				}
+				return node
 			}
 
+
+
 			def receive = {
-				case Join(nodeId: String) =>
+				case Join(friend: String) =>
 					if(nodeId == "start") {
 						predecessor = myID
 						for(i <- 0 until 160){
 							fingertable(i) = myID
 						}
 					} else {
-						// Update predeccesor and finger table
-						context.actorSelection("../" + nodeId) ! Search(sha1(myID)+1)
-						// Tell others to update their predecessors and finger tables
+						// Find predeccesor and Successor, for that ask some existing
+						// node present in the network
+						context.actorSelection("../" + friend) ! Search(sha1(myID)+1,myID)
 					}
-				case Search(id: BigInt) =>
-					var node: String = findSuccessor(id)
+				case Search(key: BigInt, sender: String) =>
+					// 1st find predecessor of key before finding the successor which is trivial
+					// once finding the predecessor
+					var pre = myID
+					if(id < (sha1(pre)) || id > fingertable(0)){
+						context.actorSelection("../"+node) ! FindPredecessor()
+					}
+					context.actorSelection("../"+node) ! TellSuccessor()
 					sender ! FoundSuccessor(node)
 
 				case FoundSearch(node: String) =>
 
 				case "TellSuccessor" =>
 					sender ! FoundSuccessor(fingertable[0])
+
+				case FoundSuccessor(node: String) =>
+					predecessor = node
 
 			}
 		}
