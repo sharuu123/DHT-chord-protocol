@@ -27,18 +27,19 @@ object project3 {
 			var count: Int=_
 			def receive = {
 				case Initialize() =>
+					var friend: String = "start"
 					var myID: String = "ipaddress0"
 					println("Creating first node with ip = " + myID)
-					val act = context.actorOf(Props(new Node(myID, numOfRequests, self)),name=myID)
-					act ! Join("start")  // TODO
+					val act = context.actorOf(Props(new Node(myID, numOfRequests, friend, self)),name=myID)
+					act ! Join()  // TODO
 
 				case AddNextNode(sender: String) =>
 					count += 1
 					if(count < numOfNodes) {
 						var myID: String = "ipaddress".concat(count.toString)
 						println("Creating node with ip = " + myID)
-						val act = context.actorOf(Props(new Node(myID, numOfRequests, self)),name=myID)
-						act ! Join(sender)
+						val act = context.actorOf(Props(new Node(myID, numOfRequests, sender, self)),name=myID)
+						act ! Join()
 					} else {
 						println("Done with adding nodes to the network!!")
 						context.system.shutdown()
@@ -48,14 +49,14 @@ object project3 {
 			}
 		}
 
-		class Node(myID: String, numOfRequests: Int, masterRef:ActorRef) 
+		class Node(myID: String, numOfRequests: Int, friend: String, masterRef:ActorRef) 
 			extends Actor{
 
 			var predecessor: String =_
 			var fingertable = Array.ofDim[String](160,2)
 
 			def receive = {
-				case Join(friend: String) =>
+				case Join() =>
 					if(friend == "start") {
 						predecessor = myID
 						for(i <- 0 until 160){
@@ -88,14 +89,14 @@ object project3 {
 
 				case UpdatePredecessor(update: String) =>
 					predecessor = update
-					sender ! "InitializeFingertable"
+					sender ! InitializeFingertable(1)
 					masterRef ! AddNextNode(myID)
 
-				case "InitializeFingertable" =>
-					for(i <= 0 until 160){
-						fingertable(i)(0) = convert2Hashvalue(myID,i)
-						fingertable(i)(1) = FindNext()
-					}
+				case InitializeFingertable(i: Int) =>
+					context.actorSelection("../" + friend) ! SearchOwner(BigInt(convert2Hashvalue(myID,i))
+
+				case SearchOwner(key: BigInt) =>
+				
 
 			}
 		}
@@ -103,8 +104,7 @@ object project3 {
 		def convert2Hashvalue(id: String, i:Int): String = {
 			(sha1(id) + BigInt(((pow(2,i)).toInt).toString)).toString
 		}
-			
-		def FindNext(nextID : )
+
 		def sha1(s: String): BigInt = {
 			val md = MessageDigest.getInstance("SHA-1")
 			val bytes: Array[Byte] = md.digest(s.getBytes)
