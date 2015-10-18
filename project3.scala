@@ -63,7 +63,7 @@ object project3 {
 							fingertable(i) = myID
 						}
 					} else {
-						// Find predeccesor and Successor, for that ask some existing
+						// Find predeccesor and Successor; for that ask some existing
 						// node present in the network
 						context.actorSelection("../" + friend) ! SearchPreAndSucc(sha1(myID)+1,myID)
 					}
@@ -74,24 +74,12 @@ object project3 {
 						context.actorSelection("../"+fingertable(0)) ! SearchPreAndSucc(key,sender)
 					} else {
 						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0))
+						fingertable(0) = sender
 					}
-					
-				// case FindPredecessor(key: BigInt, friend: String, sender: String)
-				// 	if(key < (sha1(myID)) || key > fingertable(0)){
-				// 		context.actorSelection("../"+fingertable(0)) ! FindPredecessor(key,myID,sender)
-				// 	}
-				// 	context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0))
 
-				case FoundPre(pre: String) =>
-
-
-				case FoundSearch(node: String) =>
-
-				case "TellSuccessor" =>
-					sender ! FoundSuccessor(fingertable[0])
-
-				case FoundSuccessor(node: String) =>
-					predecessor = node
+				case FoundPreAndSucc(pre: String, succ: String) =>
+					predecessor = pre
+					fingertable(0) = succ
 
 			}
 		}
