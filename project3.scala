@@ -7,6 +7,7 @@ import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
 import scala.math.BigInt
+import scala.math.pow
 import java.security.MessageDigest
 
 object project3 {
@@ -51,14 +52,15 @@ object project3 {
 			extends Actor{
 
 			var predecessor: String =_
-			var fingertable: Array[String] = new Array[String](160)
+			var fingertable = Array.ofDim[String](160,2)
 
 			def receive = {
 				case Join(friend: String) =>
 					if(friend == "start") {
 						predecessor = myID
 						for(i <- 0 until 160){
-							fingertable(i) = myID
+							fingertable(i)(0) = convert2Hashvalue(myID,i)
+							fingertable(i)(1) = myID
 						}
 						sender ! AddNextNode(myID)
 					} else {
@@ -71,25 +73,38 @@ object project3 {
 					// 1st find predecessor of key before finding the successor which is trivial
 					// once found the predecessor
 					println("SearchPreAndSucc - " + myID + " got from " + sender)
-					if(key > (sha1(myID)) || key < sha1(fingertable(0))){
-						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0))
-						fingertable(0) = sender
+					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0)(1))
+						fingertable(0)(1) = sender
 					} else {
-						println("SearchPreAndSucc - " + myID + " asking " + fingertable(0))
-						context.actorSelection("../"+fingertable(0)) ! SearchPreAndSucc(key,sender)
+						println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
+						context.actorSelection("../"+fingertable(0)(1)) ! SearchPreAndSucc(key,sender)
 					}
 
 				case FoundPreAndSucc(pre: String, succ: String) =>
 					predecessor = pre
-					fingertable(0) = succ
-					context.actorSelection("../" + fingertable(0)) ! UpdatePredecessor(myID) 
+					fingertable(0)(1) = succ
+					context.actorSelection("../" + fingertable(0)(1)) ! UpdatePredecessor(myID) 
 
 				case UpdatePredecessor(update: String) =>
 					predecessor = update
+					sender ! "InitializeFingertable"
 					masterRef ! AddNextNode(myID)
+
+				case "InitializeFingertable" =>
+					for(i <= 0 until 160){
+						fingertable(i)(0) = convert2Hashvalue(myID,i)
+						fingertable(i)(1) = FindNext()
+					}
+
 			}
 		}
 
+		def convert2Hashvalue(id: String, i:Int): String = {
+			(sha1(id) + BigInt(((pow(2,i)).toInt).toString)).toString
+		}
+			
+		def FindNext(nextID : )
 		def sha1(s: String): BigInt = {
 			val md = MessageDigest.getInstance("SHA-1")
 			val bytes: Array[Byte] = md.digest(s.getBytes)
