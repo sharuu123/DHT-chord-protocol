@@ -65,17 +65,25 @@ object project3 {
 					} else {
 						// Find predeccesor and Successor, for that ask some existing
 						// node present in the network
-						context.actorSelection("../" + friend) ! Search(sha1(myID)+1,myID)
+						context.actorSelection("../" + friend) ! SearchPreAndSucc(sha1(myID)+1,myID)
 					}
-				case Search(key: BigInt, sender: String) =>
+				case SearchPreAndSucc(key: BigInt, sender: String) =>
 					// 1st find predecessor of key before finding the successor which is trivial
-					// once finding the predecessor
-					var pre = myID
-					if(id < (sha1(pre)) || id > fingertable(0)){
-						context.actorSelection("../"+node) ! FindPredecessor()
+					// once found the predecessor
+					if(key < (sha1(myID)) || key > fingertable(0)){
+						context.actorSelection("../"+fingertable(0)) ! SearchPreAndSucc(key,sender)
+					} else {
+						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0))
 					}
-					context.actorSelection("../"+node) ! TellSuccessor()
-					sender ! FoundSuccessor(node)
+					
+				// case FindPredecessor(key: BigInt, friend: String, sender: String)
+				// 	if(key < (sha1(myID)) || key > fingertable(0)){
+				// 		context.actorSelection("../"+fingertable(0)) ! FindPredecessor(key,myID,sender)
+				// 	}
+				// 	context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0))
+
+				case FoundPre(pre: String) =>
+
 
 				case FoundSearch(node: String) =>
 
