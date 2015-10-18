@@ -39,22 +39,6 @@ object project3 {
 			var predecessor: String =_
 			var fingertable: Array[String] = new Array[String](160)
 
-			// find id's successor
-			def findSuccessor(id: BigInt): String = {
-				var node: String = findPredecessor(id)
-				context.actorSelection("../"+node) ! "TellSuccessor"
-			}
-
-			def findPredecessor(id: BigInt): String = {
-				var node = myID
-				while(id < (sha1(node)) || id > fingertable(0)){
-					// node = node.successor
-				}
-				return node
-			}
-
-
-
 			def receive = {
 				case Join(friend: String) =>
 					if(nodeId == "start") {
