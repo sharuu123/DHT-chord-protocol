@@ -6,34 +6,48 @@ import scala.util.Random
 import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Map
-import scala.BigInt
+import scala.math.BigInt
 import java.security.MessageDigest
 
 object project3 {
 	def main(args: Array[String]){
 
-		case class CreateTopology()
+		case class Initialize()
+		case class AddNextNode(sender: String)
 		case class Join(nodeId: String) 
-		case class Search(key: BigInt, sender: String)
+		case class SearchPreAndSucc(key: BigInt, sender: String)
+		case class FoundPreAndSucc(pre: String, succ: String)
+		case class UpdatePredecessor(update: String)
 
 		println("project3 - Chord DHT")
 		class Master(numOfNodes: Int, numOfRequests: Int) extends Actor{
 
 			//var gossipList: ArrayBuffer[String] = new ArrayBuffer[String]
-
+			var count: Int=_
 			def receive = {
-				case CreateTopology() =>
-					var temp: String = "start"
-					for(i <- 0 until numOfNodes){
-							var myID: String = "ipaddress".concat(i.toString)
-							val act = context.actorOf(Props(new Node(myID, numOfRequests)),name=myID)
-							act ! Join(temp)
-							temp = myID
-						}
+				case Initialize() =>
+					var myID: String = "ipaddress0"
+					println("Creating first node with ip = " + myID)
+					val act = context.actorOf(Props(new Node(myID, numOfRequests, self)),name=myID)
+					act ! Join("start")  // TODO
+
+				case AddNextNode(sender: String) =>
+					count += 1
+					if(count < numOfNodes) {
+						var myID: String = "ipaddress".concat(count.toString)
+						println("Creating node with ip = " + myID)
+						val act = context.actorOf(Props(new Node(myID, numOfRequests, self)),name=myID)
+						act ! Join(sender)
+					} else {
+						println("Done with adding nodes to the network!!")
+						context.system.shutdown()
+					}
+					 
+
 			}
 		}
 
-		class Node(myID: String, numOfRequests: Int) 
+		class Node(myID: String, numOfRequests: Int, masterRef:ActorRef) 
 			extends Actor{
 
 			var predecessor: String =_
@@ -46,20 +60,23 @@ object project3 {
 						for(i <- 0 until 160){
 							fingertable(i) = myID
 						}
+						sender ! AddNextNode(myID)
 					} else {
 						// Find predeccesor and Successor; for that ask some existing
 						// node present in the network
+						println("SearchPreAndSucc - " + myID + " asking " + friend)
 						context.actorSelection("../" + friend) ! SearchPreAndSucc(sha1(myID)+1,myID)
 					}
 				case SearchPreAndSucc(key: BigInt, sender: String) =>
 					// 1st find predecessor of key before finding the successor which is trivial
 					// once found the predecessor
-					if(key < (sha1(myID)) || key > sha1(fingertable(0)){
-						context.actorSelection("../"+fingertable(0)) ! SearchPreAndSucc(key,sender)
-					} else {
+					println("SearchPreAndSucc - " + myID + " got from " + sender)
+					if(key > (sha1(myID)) || key < sha1(fingertable(0))){
 						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0))
 						fingertable(0) = sender
-
+					} else {
+						println("SearchPreAndSucc - " + myID + " asking " + fingertable(0))
+						context.actorSelection("../"+fingertable(0)) ! SearchPreAndSucc(key,sender)
 					}
 
 				case FoundPreAndSucc(pre: String, succ: String) =>
@@ -69,32 +86,16 @@ object project3 {
 
 				case UpdatePredecessor(update: String) =>
 					predecessor = update
+					masterRef ! AddNextNode(myID)
 			}
 		}
 
-		def sha256(s: String): String = {
+		def sha1(s: String): BigInt = {
 			val md = MessageDigest.getInstance("SHA-1")
-			val digest: Array[Byte] = md.digest(s.getBytes)
+			val bytes: Array[Byte] = md.digest(s.getBytes)
 			var sb: StringBuffer = new StringBuffer
-			digest.foreach { digest =>
-				var hex = Integer.toHexString(digest & 0xff)
-				if (hex.length == 1) sb.append('0')
-				sb.append(hex)
-			}
-			sb.toString()
-		}
-		println(sha256("ipaddress5"))
-
-		def sha1(s: String): String = {
-			val md = MessageDigest.getInstance("SHA-1")
-			val digest: Array[Byte] = md.digest(s.getBytes)
-			var sb: StringBuffer = new StringBuffer
-			digest.foreach { digest =>
-				var hex = Integer.toHexString(digest & 0xff)
-				if (hex.length == 1) sb.append('0')
-				sb.append(hex)
-			}
-			sb.toString()
+			var bi: BigInt = new BigInt(new java.math.BigInteger(bytes))
+			return bi
 		}
 
 		// def sha1(s: String): BigInt = {
@@ -112,16 +113,12 @@ object project3 {
 
 		// }
 
-		println(BigInt("1234567890"))
-		println(sha1("ipaddress5"))
-
-
 		if(args.size<2){
 			println("Enter valid number of inputs!!")
 		} else {
 			val system = ActorSystem("MasterSystem")
 			val master = system.actorOf(Props(new Master(args(0).toInt, args(1).toInt)), name = "master")
-			master ! CreateTopology()
+			master ! Initialize()
 		}
 
 	}	
