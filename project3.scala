@@ -41,7 +41,7 @@ object project3 {
 
 			def receive = {
 				case Join(friend: String) =>
-					if(nodeId == "start") {
+					if(friend == "start") {
 						predecessor = myID
 						for(i <- 0 until 160){
 							fingertable(i) = myID
@@ -54,17 +54,21 @@ object project3 {
 				case SearchPreAndSucc(key: BigInt, sender: String) =>
 					// 1st find predecessor of key before finding the successor which is trivial
 					// once found the predecessor
-					if(key < (sha1(myID)) || key > fingertable(0)){
+					if(key < (sha1(myID)) || key > sha1(fingertable(0)){
 						context.actorSelection("../"+fingertable(0)) ! SearchPreAndSucc(key,sender)
 					} else {
 						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0))
 						fingertable(0) = sender
+
 					}
 
 				case FoundPreAndSucc(pre: String, succ: String) =>
 					predecessor = pre
 					fingertable(0) = succ
+					context.actorSelection("../" + fingertable(0)) ! UpdatePredecessor(myID) 
 
+				case UpdatePredecessor(update: String) =>
+					predecessor = update
 			}
 		}
 
@@ -81,20 +85,32 @@ object project3 {
 		}
 		println(sha256("ipaddress5"))
 
-		def sha1(s: String): BigInt = {
+		def sha1(s: String): String = {
 			val md = MessageDigest.getInstance("SHA-1")
 			val digest: Array[Byte] = md.digest(s.getBytes)
 			var sb: StringBuffer = new StringBuffer
 			digest.foreach { digest =>
-				var intvalue = digest.toInt
-				println(intvalue)
-				sb.append(intvalue)
+				var hex = Integer.toHexString(digest & 0xff)
+				if (hex.length == 1) sb.append('0')
+				sb.append(hex)
 			}
-			val str: String = sb.toString()
-			println(str)
-			BigInt(str)
-
+			sb.toString()
 		}
+
+		// def sha1(s: String): BigInt = {
+		// 	val md = MessageDigest.getInstance("SHA-1")
+		// 	val digest: Array[Byte] = md.digest(s.getBytes)
+		// 	var sb: StringBuffer = new StringBuffer
+		// 	digest.foreach { digest =>
+		// 		var hex = Integer.toHexString(digest & 0xff)
+		// 		if (hex.length == 1) sb.append('0')
+		// 		sb.append(hex)
+		// 	}
+		// 	val str: String = sb.toString()
+		// 	println(str)
+		// 	BigInt(str)
+
+		// }
 
 		println(BigInt("1234567890"))
 		println(sha1("ipaddress5"))
