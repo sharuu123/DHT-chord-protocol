@@ -20,8 +20,12 @@ object project3 {
 		case class FoundPreAndSucc(pre: String, succ: String)
 		case class UpdatePredecessor(update: String)
 		case class InitFingertable(i: Int)
-		case class SearchOwner(key: BigInt, i: Int, sender: String) 
-		case class FoundOwner(owner: String, i:Int)
+		case class SearchSuccessor(key: BigInt, i: Int, sender: String) 
+		case class FoundSuccessor(owner: String, i:Int)
+		case class UpdateOthers(i: Int)
+		case class SearchPredecessor(key: BigInt, i: Int, sender: String)
+		case class FoundPredecessor(pre: String, i: Int)
+		case class UpdateFingerTable(update: String, i: Int)
 
 		println("project3 - Chord DHT")
 		class Master(numOfNodes: Int, numOfRequests: Int) extends Actor{
@@ -92,8 +96,11 @@ object project3 {
 
 				case UpdatePredecessor(update: String) =>
 					predecessor = update
-					sender ! InitFingertable(1)
-					
+					// sender ! InitFingertable(1)
+					masterRef ! AddNextNode(myID)
+				
+				// Message types for initializing fingertable
+
 				case InitFingertable(i: Int) =>
 					if(i<160){
 						var key: BigInt = BigInt(convert2Hashvalue(myID,i))
@@ -102,26 +109,56 @@ object project3 {
 							fingertable(i)(1) = fingertable(0)(1)
 							self ! InitFingertable(i+1)
 						} else {
-							context.actorSelection("../" + friend) ! SearchOwner(BigInt(convert2Hashvalue(myID,i)),i,myID)
+							context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i)),i,myID)
 						}
 					} else {
-						masterRef ! AddNextNode(myID)
+						self ! UpdateOthers(0)
+						// masterRef ! AddNextNode(myID)
 					}
 
-				case SearchOwner(key: BigInt, i: Int, sender: String) =>
+				case SearchSuccessor(key: BigInt, i: Int, sender: String) =>
 					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
-						context.actorSelection("../"+sender) ! FoundOwner(myID,i)
+						context.actorSelection("../"+sender) ! FoundSuccessor(fingertable(0)(1),i)
 					} else {
-						context.actorSelection("../"+fingertable(0)(1)) ! SearchOwner(key,i,sender)
+						context.actorSelection("../"+fingertable(0)(1)) ! SearchSuccessor(key,i,sender)
 					}
 
-				case FoundOwner(owner: String, i:Int) =>
+				case FoundSuccessor(owner: String, i:Int) =>
 					fingertable(i)(0) = convert2Hashvalue(myID,i)
 					fingertable(i)(1) = owner
 					if(160>i+1){
-						context.actorSelection("../" + friend) ! SearchOwner(BigInt(convert2Hashvalue(myID,i+1)),i+1,myID)
+						context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i+1)),i+1,myID)
+					} else {
+						self ! UpdateOthers(0)
+						// masterRef ! AddNextNode(myID)
+					}
+
+				// Message types for updating other fingertables
+
+				case UpdateOthers(i: Int) =>
+					if(160>i){
+						var key: BigInt = (sha1(myID) - BigInt(((pow(2,i)).toInt).toString))
+						context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,myID)
 					} else {
 						masterRef ! AddNextNode(myID)
+					}
+					
+				case SearchPredecessor(key: BigInt, i: Int, sender: String) =>
+					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+						context.actorSelection("../"+sender) ! FoundPredecessor(myID,i)
+					} else {
+						context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,sender)
+					}
+
+				case FoundPredecessor(pre: String, i: Int) =>
+					context.actorSelection("../"+pre) ! UpdateFingerTable(myID,i)
+
+				case UpdateFingerTable(update: String, i: Int) =>
+					if(sha1(update) > (sha1(myID)) || sha1(update) < sha1(fingertable(i)(1))){
+						fingertable(i)(1) = update
+						context.actorSelection("../"+predecessor) ! UpdateFingerTable(update,i)
+					} else {
+						context.actorSelection("../"+update) ! UpdateOthers(i+1)
 					}
 			}
 		}
