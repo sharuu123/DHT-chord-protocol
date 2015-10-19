@@ -15,30 +15,20 @@ object project3 {
 
 		case class Initialize()
 		case class AddNextNode(sender: String)
-		case class Join() 
-		case class SearchPreAndSucc(key: BigInt, sender: String)
-		case class FoundPreAndSucc(pre: String, succ: String)
-		case class UpdatePredecessor(update: String)
-		case class InitFingertable(i: Int)
-		case class SearchSuccessor(key: BigInt, i: Int, sender: String) 
-		case class FoundSuccessor(owner: String, i:Int)
-		case class UpdateOthers(i: Int)
-		case class SearchPredecessor(key: BigInt, i: Int, sender: String)
-		case class FoundPredecessor(pre: String, i: Int)
-		case class UpdateFingerTable(update: String, i: Int)
-
+		
 		println("project3 - Chord DHT")
 		class Master(numOfNodes: Int, numOfRequests: Int) extends Actor{
 
 			//var gossipList: ArrayBuffer[String] = new ArrayBuffer[String]
 			var count: Int=_
+			var totalRequests: Int=_
 			def receive = {
 				case Initialize() =>
 					var friend: String = "start"
 					var myID: String = "ipaddress0"
 					println("Creating first node with ip = " + myID)
 					val act = context.actorOf(Props(new Node(myID, numOfRequests, friend, self)),name=myID)
-					act ! Join()  // TODO
+					act ! Join()  
 
 				case AddNextNode(sender: String) =>
 					count += 1
@@ -50,11 +40,29 @@ object project3 {
 					} else {
 						println("Done with adding nodes to the network!!")
 						context.system.shutdown()
+						// totalRequests = numOfNodes*numOfRequests
+						// for(i <- 0 until numOfNodes){
+						// 	var id: String = "ipaddress".concat(i.toString)
+						// 	var key: BigInt = sha1(getfilename())
+						// 	context.actorSelection("../" + id) ! "SendRequests"
+						// }
 					}
 					 
 
 			}
 		}
+
+		case class Join() 
+		case class SearchPreAndSucc(key: BigInt, sender: String)
+		case class FoundPreAndSucc(pre: String, succ: String)
+		case class UpdatePredecessor(update: String)
+		case class InitFingertable(i: Int)
+		case class SearchSuccessor(key: BigInt, i: Int, sender: String) 
+		case class FoundSuccessor(owner: String, i:Int)
+		case class UpdateOthers(i: Int)
+		case class SearchPredecessor(key: BigInt, i: Int, sender: String)
+		case class FoundPredecessor(pre: String, i: Int)
+		case class UpdateFingerTable(update: String, i: Int)
 
 		class Node(myID: String, numOfRequests: Int, friend: String, masterRef:ActorRef) 
 			extends Actor{
@@ -160,7 +168,18 @@ object project3 {
 					} else {
 						context.actorSelection("../"+update) ! UpdateOthers(i+1)
 					}
+
+				// Send Requests
+
+				case "SendRequests" =>
+					
 			}
+		}
+
+		def getfilename(): String = {
+			var i = Random.nextInt(100000)
+			var str = "sdarsha".concat(Integer.toString(i,36))
+			return str
 		}
 
 		def convert2Hashvalue(id: String, i:Int): String = {
