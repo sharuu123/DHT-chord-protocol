@@ -26,7 +26,8 @@ object project3 {
 				case Initialize() =>
 					var friend: String = "start"
 					var myID: String = "ipaddress0"
-					println("Creating first node with ip = " + myID)
+					println("Creating first node with ip = " + sha1(myID))
+					println("Creating first node with ip = " + sha256(myID))
 					val act = context.actorOf(Props(new Node(myID, numOfRequests, friend, self)),name=myID)
 					act ! Join()  
 
@@ -34,18 +35,17 @@ object project3 {
 					count += 1
 					if(count < numOfNodes) {
 						var myID: String = "ipaddress".concat(count.toString)
-						println("Creating node with ip = " + myID)
+						println("Creating node with ip = " + sha1(myID))
+						println("Creating node with ip = " + sha256(myID))
 						val act = context.actorOf(Props(new Node(myID, numOfRequests, sender, self)),name=myID)
 						act ! Join()
 					} else {
 						println("Done with adding nodes to the network!!")
-						context.system.shutdown()
-						// totalRequests = numOfNodes*numOfRequests
-						// for(i <- 0 until numOfNodes){
-						// 	var id: String = "ipaddress".concat(i.toString)
-						// 	var key: BigInt = sha1(getfilename())
-						// 	context.actorSelection("../" + id) ! "SendRequests"
-						// }
+						//context.system.shutdown()
+						for(i <- 0 until numOfNodes){
+							var id: String = "ipaddress".concat(i.toString)
+							context.actorSelection(id) ! "SendRequests"
+						}
 					}
 					 
 
@@ -63,12 +63,16 @@ object project3 {
 		case class SearchPredecessor(key: BigInt, i: Int, sender: String)
 		case class FoundPredecessor(pre: String, i: Int)
 		case class UpdateFingerTable(update: String, i: Int)
+		case class SearchFile(key: BigInt, sender: String, hopcount: Int)
+		case class FoundFile(owner: String, key: BigInt, hopcount: Int)
+
 
 		class Node(myID: String, numOfRequests: Int, friend: String, masterRef:ActorRef) 
 			extends Actor{
 
 			var predecessor: String =_
 			var fingertable = Array.ofDim[String](160,2)
+
 
 			def receive = {
 				case Join() =>
@@ -82,18 +86,18 @@ object project3 {
 					} else {
 						// Find predeccesor and Successor; for that ask some existing
 						// node present in the network
-						println("SearchPreAndSucc - " + myID + " asking " + friend)
+						// println("SearchPreAndSucc - " + myID + " asking " + friend)
 						context.actorSelection("../" + friend) ! SearchPreAndSucc(sha1(myID)+1,myID)
 					}
 				case SearchPreAndSucc(key: BigInt, sender: String) =>
 					// 1st find predecessor of key before finding the successor which is trivial
 					// once found the predecessor
-					println("SearchPreAndSucc - " + myID + " got from " + sender)
+					// println("SearchPreAndSucc - " + myID + " got from " + sender)
 					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
 						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0)(1))
 						fingertable(0)(1) = sender
 					} else {
-						println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
+						// println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
 						context.actorSelection("../"+fingertable(0)(1)) ! SearchPreAndSucc(key,sender)
 					}
 
@@ -104,8 +108,8 @@ object project3 {
 
 				case UpdatePredecessor(update: String) =>
 					predecessor = update
-					// sender ! InitFingertable(1)
-					masterRef ! AddNextNode(myID)
+					sender ! InitFingertable(1)
+					// masterRef ! AddNextNode(myID)
 				
 				// Message types for initializing fingertable
 
@@ -172,7 +176,20 @@ object project3 {
 				// Send Requests
 
 				case "SendRequests" =>
-					
+					println("got send requests for " + myID)
+					for(i <- 0 until numOfRequests){
+						var key: BigInt = sha1(getfilename())
+						self ! SearchFile(key,myID,0)
+					}
+
+				case SearchFile(key: BigInt, sender: String, hopcount: Int) =>
+					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+						context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount)
+					} else {
+						context.actorSelection("../"+fingertable(0)(1)) ! SearchFile(key,sender,hopcount+1)
+					}		
+				case FoundFile(owner: String, key: BigInt, hopcount: Int)=>
+					println("sender = " + myID + " owner = " +owner+ " hops = " + hopcount)
 			}
 		}
 
@@ -196,20 +213,19 @@ object project3 {
 			return bi
 		}
 
-		// def sha1(s: String): BigInt = {
-		// 	val md = MessageDigest.getInstance("SHA-1")
-		// 	val digest: Array[Byte] = md.digest(s.getBytes)
-		// 	var sb: StringBuffer = new StringBuffer
-		// 	digest.foreach { digest =>
-		// 		var hex = Integer.toHexString(digest & 0xff)
-		// 		if (hex.length == 1) sb.append('0')
-		// 		sb.append(hex)
-		// 	}
-		// 	val str: String = sb.toString()
-		// 	println(str)
-		// 	BigInt(str)
+		def sha256(s: String): String = {
+			val md = MessageDigest.getInstance("SHA-1")
+			val digest: Array[Byte] = md.digest(s.getBytes)
+			var sb: StringBuffer = new StringBuffer
+			digest.foreach { digest =>
+				var hex = Integer.toHexString(digest & 0xff)
+				if (hex.length == 1) sb.append('0')
+				sb.append(hex)
+			}
+			sb.toString()
+		}
 
-		// }
+
 
 		if(args.size!=2){
 			println("Enter valid number of inputs!!")
