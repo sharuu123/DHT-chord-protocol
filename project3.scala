@@ -12,6 +12,14 @@ object project3 {
 		case class Initialize()
 		case class AddNextNode(sender: String)
 		case class FindAverageHop(hopcount: Int)
+
+		if(args.size!=2){
+			println("Enter valid number of inputs!!")
+		} else {
+			val system = ActorSystem("MasterSystem")
+			val master = system.actorOf(Props(new Master(args(0).toInt, args(1).toInt)), name = "master")
+			master ! Initialize()
+		}
 		
 		println("project3 - Chord DHT")
 		class Master(numOfNodes: Int, numOfRequests: Int) extends Actor{
@@ -265,10 +273,9 @@ object project3 {
 					}
 
 				case FoundFile(owner: String, key: BigInt, hopcount: Int)=>
-					print(".")
+					// print(".")
 					// println("sender = " + myID + " owner = " +owner+ " pre = "+predecessor+" succ = "+fingertable(0)(1)+ " hops = " + hopcount)
 					masterRef ! FindAverageHop(hopcount)
-
 			}
 		}
 
@@ -293,13 +300,6 @@ object project3 {
 			return bi
 		}
 
-		if(args.size!=2){
-			println("Enter valid number of inputs!!")
-		} else {
-			val system = ActorSystem("MasterSystem")
-			val master = system.actorOf(Props(new Master(args(0).toInt, args(1).toInt)), name = "master")
-			master ! Initialize()
-		}
 	}	
 }
 
