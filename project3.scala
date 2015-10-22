@@ -9,7 +9,6 @@ object project3 {
 	def main(args: Array[String]){
 		var big1: BigInt = BigInt("1")
 
-		case class Initialize()
 		case class AddNextNode(sender: String)
 		case class FindAverageHop(hopcount: Int)
 
@@ -18,7 +17,7 @@ object project3 {
 		} else {
 			val system = ActorSystem("MasterSystem")
 			val master = system.actorOf(Props(new Master(args(0).toInt, args(1).toInt)), name = "master")
-			master ! Initialize()
+			master ! "Start"
 		}
 		
 		println("project3 - Chord DHT")
@@ -29,13 +28,13 @@ object project3 {
 			var totalHopCount: Int =_
 
 			def receive = {
-				case Initialize() =>
+				case "Start" =>
 					var friend: String = "start"
 					var myID: String = "ip0"
 					println("Joining nodes to the network!!")
 					// println("Creating first node with ip = " +myID+" "+ sha1(myID))
 					val act = context.actorOf(Props(new Node(myID, numOfRequests, friend, self)),name=myID)
-					act ! Join()  
+					act ! "Join"  
 
 				case AddNextNode(sender: String) =>
 					print(".")
@@ -44,7 +43,7 @@ object project3 {
 						var myID: String = "ip".concat(count.toString)
 						// println("Creating node with ip = " +myID+" "+ sha1(myID))
 						val act = context.actorOf(Props(new Node(myID, numOfRequests, sender, self)),name=myID)
-						act ! Join()
+						act ! "Join"
 					} else {
 						println(" ")
 						println("Done with adding nodes to the network!!")
@@ -67,11 +66,9 @@ object project3 {
 						println("*** Average Number of hops = "+ averageHopCount+" ***")
 						context.system.shutdown()
 					}
-
 			}
 		}
 
-		case class Join() 
 		case class SearchPreAndSucc(key: BigInt, sender: String)
 		case class FoundPreAndSucc(pre: String, succ: String)
 		case class UpdatePredecessor(update: String)
@@ -108,7 +105,7 @@ object project3 {
 			}
 
 			def receive = {
-				case Join() =>
+				case "Join" =>
 					if(friend == "start") {
 						predecessor = myID
 						for(i <- 0 until 160){
@@ -158,7 +155,6 @@ object project3 {
 					predecessor = update
 					// println("myID = "+myID+" pre = "+predecessor+" succ = "+fingertable(0)(1))
 					sender ! InitFingertable(1)
-					// masterRef ! AddNextNode(myID)
 				
 				// Message types for initializing fingertable
 
@@ -169,7 +165,6 @@ object project3 {
 							if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
 								fingertable(i)(0) = convert2Hashvalue(myID,i)
 								fingertable(i)(1) = fingertable(0)(1)
-								// println(fingertable(i)(1))
 								self ! InitFingertable(i+1)
 							} else {
 								context.actorSelection("../" + friend) ! SearchSuccessor(key,i,myID)
@@ -178,7 +173,6 @@ object project3 {
 							if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
 								fingertable(i)(0) = convert2Hashvalue(myID,i)
 								fingertable(i)(1) = fingertable(0)(1)
-								// println(fingertable(i)(1))
 								self ! InitFingertable(i+1)
 							} else {
 								context.actorSelection("../" + friend) ! SearchSuccessor(key,i,myID)
@@ -186,7 +180,6 @@ object project3 {
 						}
 					} else {
 						self ! UpdateOthers(0)
-						// masterRef ! AddNextNode(myID)
 					}
 
 				case SearchSuccessor(key: BigInt, i: Int, sender: String) =>
@@ -217,9 +210,6 @@ object project3 {
 						key = key.mod((big1 << 160)-big1)
 						context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,myID)
 					} else {
-						// for(i <- 0 until 160){
-						// 	println(fingertable(i)(1))
-						// }
 						masterRef ! AddNextNode(myID)
 					}
 					
@@ -302,4 +292,3 @@ object project3 {
 
 	}	
 }
-
