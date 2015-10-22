@@ -5,6 +5,12 @@ import scala.math.BigInt
 import scala.math.pow
 import java.security.MessageDigest
 
+// TODO
+// generate proper ip's
+// multicast from master
+// log n while initfingertable
+// time stats
+
 object project3 {
 	def main(args: Array[String]){
 		var big1: BigInt = BigInt("1")
@@ -64,6 +70,7 @@ object project3 {
 						var averageHopCount: Int = (totalHopCount/totalRequests)
 						println(" ")
 						println("*** Average Number of hops = "+ averageHopCount+" ***")
+						println(" ")
 						context.system.shutdown()
 					}
 			}
@@ -80,7 +87,6 @@ object project3 {
 		case class FoundPredecessor(pre: String, i: Int)
 		case class UpdateFingerTable(update: String, i: Int)
 		case class SearchFile(key: BigInt, sender: String, hopcount: Int)
-		case class FoundFile(owner: String, key: BigInt, hopcount: Int)
 
 		class Node(myID: String, numOfRequests: Int, friend: String, masterRef:ActorRef) 
 			extends Actor{
@@ -250,22 +256,19 @@ object project3 {
 				case SearchFile(key: BigInt, sender: String, hopcount: Int) =>
 					if((sha1(myID)) < sha1(fingertable(0)(1))){
 						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
-							context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount+1)
+							masterRef ! FindAverageHop(hopcount)
+							// context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount+1)
 						} else {
 							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchFile(key,sender,hopcount+1)
 						}
 					} else {
 						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
-							context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount+1)
+							masterRef ! FindAverageHop(hopcount)
+							// context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount+1)
 						} else {
 							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchFile(key,sender,hopcount+1)
 						}
 					}
-
-				case FoundFile(owner: String, key: BigInt, hopcount: Int)=>
-					// print(".")
-					// println("sender = " + myID + " owner = " +owner+ " pre = "+predecessor+" succ = "+fingertable(0)(1)+ " hops = " + hopcount)
-					masterRef ! FindAverageHop(hopcount)
 			}
 		}
 
