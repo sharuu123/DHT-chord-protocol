@@ -16,39 +16,54 @@ object project3 {
 
 		case class Initialize()
 		case class AddNextNode(sender: String)
+		case class FindAverageHop(hopcount: Int)
 		
 		println("project3 - Chord DHT")
 		class Master(numOfNodes: Int, numOfRequests: Int) extends Actor{
 
-			//var gossipList: ArrayBuffer[String] = new ArrayBuffer[String]
-			var count: Int=_
-			var totalRequests: Int=_
+			var count: Int =_
+			var totalRequests: Int =_
+			var totalHopCount: Int =_
+
 			def receive = {
 				case Initialize() =>
 					var friend: String = "start"
 					var myID: String = "ip0"
-					println("Creating first node with ip = " +myID+" "+ sha1(myID))
-					// println("Creating first node with ip = " + sha256(myID))
+					println("Joining nodes to the network!!")
+					// println("Creating first node with ip = " +myID+" "+ sha1(myID))
 					val act = context.actorOf(Props(new Node(myID, numOfRequests, friend, self)),name=myID)
 					act ! Join()  
 
 				case AddNextNode(sender: String) =>
+					print(".")
 					count += 1
 					if(count < numOfNodes) {
 						var myID: String = "ip".concat(count.toString)
 						// println("Creating node with ip = " +myID+" "+ sha1(myID))
-						// println("Creating node with ip = " + sha256(myID))
 						val act = context.actorOf(Props(new Node(myID, numOfRequests, sender, self)),name=myID)
 						act ! Join()
 					} else {
+						println(" ")
 						println("Done with adding nodes to the network!!")
-						context.system.shutdown()
-						// for(i <- 0 until numOfNodes){
-						// 	var id: String = "ip".concat(i.toString)
-						// 	context.actorSelection(id) ! "SendRequests"
-						// }
+						// context.system.shutdown()
+						count = 0
+						totalRequests = numOfNodes*numOfRequests
+						println("Nodes sending requests")
+						for(i <- 0 until numOfNodes){
+							var id: String = "ip".concat(i.toString)
+							context.actorSelection(id) ! "SendRequests"
+						}
 					}
-					 
+
+				case FindAverageHop(hopcount: Int) =>
+					totalHopCount += hopcount
+					count += 1 
+					if(count == totalRequests){
+						var averageHopCount: Int = (totalHopCount/totalRequests)
+						println(" ")
+						println("*** Average Number of hops = "+ averageHopCount+" ***")
+						context.system.shutdown()
+					}
 
 			}
 		}
@@ -134,21 +149,32 @@ object project3 {
 				case UpdatePredecessor(update: String) =>
 					predecessor = update
 					// println("myID = "+myID+" pre = "+predecessor+" succ = "+fingertable(0)(1))
-					// sender ! InitFingertable(1)
-					masterRef ! AddNextNode(myID)
+					sender ! InitFingertable(1)
+					// masterRef ! AddNextNode(myID)
 				
 				// Message types for initializing fingertable
 
 				case InitFingertable(i: Int) =>
 					if(i<160){
 						var key: BigInt = BigInt(convert2Hashvalue(myID,i))
-						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
-							fingertable(i)(0) = convert2Hashvalue(myID,i)
-							fingertable(i)(1) = fingertable(0)(1)
-							// println(fingertable(i)(1))
-							self ! InitFingertable(i+1)
+						if((sha1(myID)) < sha1(fingertable(0)(1))){
+							if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
+								fingertable(i)(0) = convert2Hashvalue(myID,i)
+								fingertable(i)(1) = fingertable(0)(1)
+								// println(fingertable(i)(1))
+								self ! InitFingertable(i+1)
+							} else {
+								context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i)),i,myID)
+							}
 						} else {
-							context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i)),i,myID)
+							if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+								fingertable(i)(0) = convert2Hashvalue(myID,i)
+								fingertable(i)(1) = fingertable(0)(1)
+								// println(fingertable(i)(1))
+								self ! InitFingertable(i+1)
+							} else {
+								context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i)),i,myID)
+							}
 						}
 					} else {
 						self ! UpdateOthers(0)
@@ -156,10 +182,18 @@ object project3 {
 					}
 
 				case SearchSuccessor(key: BigInt, i: Int, sender: String) =>
-					if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
-						context.actorSelection("../"+sender) ! FoundSuccessor(fingertable(0)(1),i)
+					if((sha1(myID)) < sha1(fingertable(0)(1))){
+						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundSuccessor(fingertable(0)(1),i)
+						} else {
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchSuccessor(key,i,sender)
+						}
 					} else {
-						context.actorSelection("../"+fingertable(0)(1)) ! SearchSuccessor(key,i,sender)
+						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundSuccessor(fingertable(0)(1),i)
+						} else {
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchSuccessor(key,i,sender)
+						}
 					}
 
 				case FoundSuccessor(owner: String, i:Int) =>
@@ -185,12 +219,20 @@ object project3 {
 					}
 					
 				case SearchPredecessor(key: BigInt, i: Int, sender: String) =>
-					if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
-						context.actorSelection("../"+sender) ! FoundPredecessor(myID,i)
+					if((sha1(myID)) < sha1(fingertable(0)(1))){
+						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundPredecessor(myID,i)
+						} else {
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,sender)
+						}
 					} else {
-						context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,sender)
+						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundPredecessor(myID,i)
+						} else {
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,sender)
+						}
 					}
-
+					
 				case FoundPredecessor(pre: String, i: Int) =>
 					context.actorSelection("../"+pre) ! UpdateFingerTable(myID,i)
 
@@ -201,38 +243,34 @@ object project3 {
 					} else {
 						context.actorSelection("../"+update) ! UpdateOthers(i+1)
 					}
-
+					
 				// Send Requests
 
 				case "SendRequests" =>
-					// println("got send requests for " + myID)
-					// for(i <- 0 until 160){
-					// 	println("fingertable value for " +i+ " = "+fingertable(i)(1))
-					// }
-					// if(myID == "ip3"){
-					// 	for(i <- 0 until numOfRequests){
-					// 		var key: BigInt = sha1(getfilename())
-					// 		self ! SearchFile(key,myID,0)
-					// 	}
-					// }
 					for(i <- 0 until numOfRequests){
 						var key: BigInt = sha1(getfilename())
 						self ! SearchFile(key,myID,0)
 					}
 
 				case SearchFile(key: BigInt, sender: String, hopcount: Int) =>
-					if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
-						context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount)
+					if((sha1(myID)) < sha1(fingertable(0)(1))){
+						if(key < (sha1(myID)) && key > (sha1(predecessor))){
+							context.actorSelection("../"+sender) ! FoundFile(myID,key,hopcount)
+						} else {
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchFile(key,sender,hopcount+1)
+						}
 					} else {
-						context.actorSelection("../"+fingertable(0)(1)) ! SearchFile(key,sender,hopcount+1)
-					}		
+						if(key < (sha1(myID)) || key > (sha1(predecessor))){
+							context.actorSelection("../"+sender) ! FoundFile(myID,key,hopcount)
+						} else {
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchFile(key,sender,hopcount+1)
+						}
+					}
+
 				case FoundFile(owner: String, key: BigInt, hopcount: Int)=>
-					println("sender = " + myID + " owner = " +owner+ " pre = "+predecessor+" succ = "+fingertable(0)(1)+ " hops = " + hopcount)
-					// println("sender = " + myID + " " + sha1(myID) )
-					// println("owner = " + owner+ " " + sha1(owner) )
-					// println("pre = " + predecessor + " " + sha1(predecessor) )
-					// println("succ = " + fingertable(0)(1) + " " + sha1(fingertable(0)(1)) )
-					// println("key = " + key)
+					print(".")
+					// println("sender = " + myID + " owner = " +owner+ " pre = "+predecessor+" succ = "+fingertable(0)(1)+ " hops = " + hopcount)
+					masterRef ! FindAverageHop(hopcount)
 
 			}
 		}
@@ -257,26 +295,6 @@ object project3 {
 			var bi: BigInt = new BigInt(new java.math.BigInteger(1,bytes))
 			return bi
 		}
-
-		def sha256(s: String): String = {
-			val md = MessageDigest.getInstance("SHA-1")
-			val digest: Array[Byte] = md.digest(s.getBytes)
-			var sb: StringBuffer = new StringBuffer
-			digest.foreach { digest =>
-				var hex = Integer.toHexString(digest & 0xff)
-				if (hex.length == 1) sb.append('0')
-				sb.append(hex)
-			}
-			sb.toString()
-		}
-
-		
-		// println("sharath = "+sha1("ip1"))
-		// for(i <- 0 until 161){
-		// 	println("second = "+ i+"  "+()+ "  "+BigInt(convert2Hashvalue("ip1",i)))
-		// }
-		
-
 
 		if(args.size!=2){
 			println("Enter valid number of inputs!!")
