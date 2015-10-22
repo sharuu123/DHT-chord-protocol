@@ -1,11 +1,6 @@
-import akka.actor.Actor
-import akka.actor.ActorRef
-import akka.actor.ActorSystem
-import akka.actor.Props
+import akka.actor._
 import scala.util.Random
 import scala.concurrent.duration._
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.Map
 import scala.math.BigInt
 import scala.math.pow
 import java.security.MessageDigest
@@ -82,7 +77,6 @@ object project3 {
 		case class SearchFile(key: BigInt, sender: String, hopcount: Int)
 		case class FoundFile(owner: String, key: BigInt, hopcount: Int)
 
-
 		class Node(myID: String, numOfRequests: Int, friend: String, masterRef:ActorRef) 
 			extends Actor{
 
@@ -91,12 +85,18 @@ object project3 {
 
 			def closestPrecedingFinger(key: BigInt): String = {
 				for(i <- 0 until 160){
-					var finger: BigInt = BigInt(fingertable(159-i)(0))
-					if(finger > sha1(myID) && finger < key){
-						return fingertable(159-i)(1)
+					var finger: BigInt = sha1(fingertable(159-i)(1))
+					if(sha1(myID) < key){
+						if(finger > sha1(myID) && finger < key){
+							return fingertable(159-i)(1)
+						}
+					} else {
+						if(finger > sha1(myID) || finger < key){
+							return fingertable(159-i)(1)
+						}
 					}
 				}
-				return myID
+				return fingertable(0)(1)
 			}
 
 			def receive = {
@@ -126,8 +126,8 @@ object project3 {
 							fingertable(0)(1) = sender
 							// println("myID = "+myID+" pre = "+predecessor+" succ = "+fingertable(0)(1))
 						} else {
-							// println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
-							context.actorSelection("../"+fingertable(0)(1)) ! SearchPreAndSucc(key,sender)
+							// println("SearchPreAndSucc - " + myID + " asking " + closestPrecedingFinger(key))
+							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchPreAndSucc(key,sender)
 						}
 					} else {
 						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
@@ -135,8 +135,8 @@ object project3 {
 							fingertable(0)(1) = sender
 							// println("myID = "+myID+" pre = "+predecessor+" succ = "+fingertable(0)(1))
 						} else {
-							// println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
-							context.actorSelection("../"+fingertable(0)(1)) ! SearchPreAndSucc(key,sender)
+							// println("SearchPreAndSucc - " + myID + " asking " + closestPrecedingFinger(key))
+							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchPreAndSucc(key,sender)
 						}
 					}
 
@@ -164,7 +164,7 @@ object project3 {
 								// println(fingertable(i)(1))
 								self ! InitFingertable(i+1)
 							} else {
-								context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i)),i,myID)
+								context.actorSelection("../" + friend) ! SearchSuccessor(key,i,myID)
 							}
 						} else {
 							if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
@@ -173,7 +173,7 @@ object project3 {
 								// println(fingertable(i)(1))
 								self ! InitFingertable(i+1)
 							} else {
-								context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i)),i,myID)
+								context.actorSelection("../" + friend) ! SearchSuccessor(key,i,myID)
 							}
 						}
 					} else {
@@ -199,13 +199,7 @@ object project3 {
 				case FoundSuccessor(owner: String, i:Int) =>
 					fingertable(i)(0) = convert2Hashvalue(myID,i)
 					fingertable(i)(1) = owner
-					// println(fingertable(i)(1))
-					if(160>i+1){
-						context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i+1)),i+1,myID)
-					} else {
-						self ! UpdateOthers(0)
-						// masterRef ! AddNextNode(myID)
-					}
+					self ! InitFingertable(i+1)
 
 				// Message types for updating other fingertables
 
@@ -215,6 +209,9 @@ object project3 {
 						key = key.mod((big1 << 160)-big1)
 						context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,myID)
 					} else {
+						// for(i <- 0 until 160){
+						// 	println(fingertable(i)(1))
+						// }
 						masterRef ! AddNextNode(myID)
 					}
 					
@@ -223,13 +220,13 @@ object project3 {
 						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
 							context.actorSelection("../"+sender) ! FoundPredecessor(myID,i)
 						} else {
-							context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,sender)
+							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchPredecessor(key,i,sender)
 						}
 					} else {
 						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
 							context.actorSelection("../"+sender) ! FoundPredecessor(myID,i)
 						} else {
-							context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,sender)
+							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchPredecessor(key,i,sender)
 						}
 					}
 					
@@ -254,16 +251,16 @@ object project3 {
 
 				case SearchFile(key: BigInt, sender: String, hopcount: Int) =>
 					if((sha1(myID)) < sha1(fingertable(0)(1))){
-						if(key < (sha1(myID)) && key > (sha1(predecessor))){
-							context.actorSelection("../"+sender) ! FoundFile(myID,key,hopcount)
+						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount+1)
 						} else {
-							context.actorSelection("../"+fingertable(0)(1)) ! SearchFile(key,sender,hopcount+1)
+							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchFile(key,sender,hopcount+1)
 						}
 					} else {
-						if(key < (sha1(myID)) || key > (sha1(predecessor))){
-							context.actorSelection("../"+sender) ! FoundFile(myID,key,hopcount)
+						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount+1)
 						} else {
-							context.actorSelection("../"+fingertable(0)(1)) ! SearchFile(key,sender,hopcount+1)
+							context.actorSelection("../"+closestPrecedingFinger(key)) ! SearchFile(key,sender,hopcount+1)
 						}
 					}
 
@@ -303,6 +300,6 @@ object project3 {
 			val master = system.actorOf(Props(new Master(args(0).toInt, args(1).toInt)), name = "master")
 			master ! Initialize()
 		}
-
 	}	
 }
+
