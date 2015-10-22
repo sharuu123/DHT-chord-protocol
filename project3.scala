@@ -12,6 +12,7 @@ import java.security.MessageDigest
 
 object project3 {
 	def main(args: Array[String]){
+		var big1: BigInt = BigInt("1")
 
 		case class Initialize()
 		case class AddNextNode(sender: String)
@@ -25,27 +26,27 @@ object project3 {
 			def receive = {
 				case Initialize() =>
 					var friend: String = "start"
-					var myID: String = "ipaddress0"
-					println("Creating first node with ip = " + sha1(myID))
-					println("Creating first node with ip = " + sha256(myID))
+					var myID: String = "ip0"
+					println("Creating first node with ip = " +myID+" "+ sha1(myID))
+					// println("Creating first node with ip = " + sha256(myID))
 					val act = context.actorOf(Props(new Node(myID, numOfRequests, friend, self)),name=myID)
 					act ! Join()  
 
 				case AddNextNode(sender: String) =>
 					count += 1
 					if(count < numOfNodes) {
-						var myID: String = "ipaddress".concat(count.toString)
-						println("Creating node with ip = " + sha1(myID))
-						println("Creating node with ip = " + sha256(myID))
+						var myID: String = "ip".concat(count.toString)
+						// println("Creating node with ip = " +myID+" "+ sha1(myID))
+						// println("Creating node with ip = " + sha256(myID))
 						val act = context.actorOf(Props(new Node(myID, numOfRequests, sender, self)),name=myID)
 						act ! Join()
 					} else {
 						println("Done with adding nodes to the network!!")
-						//context.system.shutdown()
-						for(i <- 0 until numOfNodes){
-							var id: String = "ipaddress".concat(i.toString)
-							context.actorSelection(id) ! "SendRequests"
-						}
+						context.system.shutdown()
+						// for(i <- 0 until numOfNodes){
+						// 	var id: String = "ip".concat(i.toString)
+						// 	context.actorSelection(id) ! "SendRequests"
+						// }
 					}
 					 
 
@@ -73,6 +74,15 @@ object project3 {
 			var predecessor: String =_
 			var fingertable = Array.ofDim[String](160,2)
 
+			def closestPrecedingFinger(key: BigInt): String = {
+				for(i <- 0 until 160){
+					var finger: BigInt = BigInt(fingertable(159-i)(0))
+					if(finger > sha1(myID) && finger < key){
+						return fingertable(159-i)(1)
+					}
+				}
+				return myID
+			}
 
 			def receive = {
 				case Join() =>
@@ -87,38 +97,55 @@ object project3 {
 						// Find predeccesor and Successor; for that ask some existing
 						// node present in the network
 						// println("SearchPreAndSucc - " + myID + " asking " + friend)
-						context.actorSelection("../" + friend) ! SearchPreAndSucc(sha1(myID)+1,myID)
+						var key: BigInt = BigInt(convert2Hashvalue(myID,0))
+						// println("FindSuccessor, myID = "+myID+" "+key)
+						context.actorSelection("../" + friend) ! SearchPreAndSucc(key,myID)
 					}
 				case SearchPreAndSucc(key: BigInt, sender: String) =>
 					// 1st find predecessor of key before finding the successor which is trivial
 					// once found the predecessor
 					// println("SearchPreAndSucc - " + myID + " got from " + sender)
-					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
-						context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0)(1))
-						fingertable(0)(1) = sender
+					if((sha1(myID)) < sha1(fingertable(0)(1))){
+						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0)(1))
+							fingertable(0)(1) = sender
+							// println("myID = "+myID+" pre = "+predecessor+" succ = "+fingertable(0)(1))
+						} else {
+							// println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchPreAndSucc(key,sender)
+						}
 					} else {
-						// println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
-						context.actorSelection("../"+fingertable(0)(1)) ! SearchPreAndSucc(key,sender)
+						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+							context.actorSelection("../"+sender) ! FoundPreAndSucc(myID,fingertable(0)(1))
+							fingertable(0)(1) = sender
+							// println("myID = "+myID+" pre = "+predecessor+" succ = "+fingertable(0)(1))
+						} else {
+							// println("SearchPreAndSucc - " + myID + " asking " + fingertable(0)(1))
+							context.actorSelection("../"+fingertable(0)(1)) ! SearchPreAndSucc(key,sender)
+						}
 					}
 
 				case FoundPreAndSucc(pre: String, succ: String) =>
+					// println("myID = "+myID+" pre = "+pre+" succ = "+succ)
 					predecessor = pre
 					fingertable(0)(1) = succ
 					context.actorSelection("../" + fingertable(0)(1)) ! UpdatePredecessor(myID) 
 
 				case UpdatePredecessor(update: String) =>
 					predecessor = update
-					sender ! InitFingertable(1)
-					// masterRef ! AddNextNode(myID)
+					// println("myID = "+myID+" pre = "+predecessor+" succ = "+fingertable(0)(1))
+					// sender ! InitFingertable(1)
+					masterRef ! AddNextNode(myID)
 				
 				// Message types for initializing fingertable
 
 				case InitFingertable(i: Int) =>
 					if(i<160){
 						var key: BigInt = BigInt(convert2Hashvalue(myID,i))
-						if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+						if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
 							fingertable(i)(0) = convert2Hashvalue(myID,i)
 							fingertable(i)(1) = fingertable(0)(1)
+							// println(fingertable(i)(1))
 							self ! InitFingertable(i+1)
 						} else {
 							context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i)),i,myID)
@@ -129,7 +156,7 @@ object project3 {
 					}
 
 				case SearchSuccessor(key: BigInt, i: Int, sender: String) =>
-					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+					if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
 						context.actorSelection("../"+sender) ! FoundSuccessor(fingertable(0)(1),i)
 					} else {
 						context.actorSelection("../"+fingertable(0)(1)) ! SearchSuccessor(key,i,sender)
@@ -138,6 +165,7 @@ object project3 {
 				case FoundSuccessor(owner: String, i:Int) =>
 					fingertable(i)(0) = convert2Hashvalue(myID,i)
 					fingertable(i)(1) = owner
+					// println(fingertable(i)(1))
 					if(160>i+1){
 						context.actorSelection("../" + friend) ! SearchSuccessor(BigInt(convert2Hashvalue(myID,i+1)),i+1,myID)
 					} else {
@@ -149,14 +177,15 @@ object project3 {
 
 				case UpdateOthers(i: Int) =>
 					if(160>i){
-						var key: BigInt = (sha1(myID) - BigInt(((pow(2,i)).toInt).toString))
+						var key: BigInt = (sha1(myID) - (big1 << i))
+						key = key.mod((big1 << 160)-big1)
 						context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,myID)
 					} else {
 						masterRef ! AddNextNode(myID)
 					}
 					
 				case SearchPredecessor(key: BigInt, i: Int, sender: String) =>
-					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+					if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
 						context.actorSelection("../"+sender) ! FoundPredecessor(myID,i)
 					} else {
 						context.actorSelection("../"+fingertable(0)(1)) ! SearchPredecessor(key,i,sender)
@@ -166,7 +195,7 @@ object project3 {
 					context.actorSelection("../"+pre) ! UpdateFingerTable(myID,i)
 
 				case UpdateFingerTable(update: String, i: Int) =>
-					if(sha1(update) > (sha1(myID)) || sha1(update) < sha1(fingertable(i)(1))){
+					if(sha1(update) > (sha1(myID)) && sha1(update) < sha1(fingertable(i)(1))){
 						fingertable(i)(1) = update
 						context.actorSelection("../"+predecessor) ! UpdateFingerTable(update,i)
 					} else {
@@ -176,20 +205,35 @@ object project3 {
 				// Send Requests
 
 				case "SendRequests" =>
-					println("got send requests for " + myID)
+					// println("got send requests for " + myID)
+					// for(i <- 0 until 160){
+					// 	println("fingertable value for " +i+ " = "+fingertable(i)(1))
+					// }
+					// if(myID == "ip3"){
+					// 	for(i <- 0 until numOfRequests){
+					// 		var key: BigInt = sha1(getfilename())
+					// 		self ! SearchFile(key,myID,0)
+					// 	}
+					// }
 					for(i <- 0 until numOfRequests){
 						var key: BigInt = sha1(getfilename())
 						self ! SearchFile(key,myID,0)
 					}
 
 				case SearchFile(key: BigInt, sender: String, hopcount: Int) =>
-					if(key > (sha1(myID)) || key < sha1(fingertable(0)(1))){
+					if(key > (sha1(myID)) && key < sha1(fingertable(0)(1))){
 						context.actorSelection("../"+sender) ! FoundFile(fingertable(0)(1),key,hopcount)
 					} else {
 						context.actorSelection("../"+fingertable(0)(1)) ! SearchFile(key,sender,hopcount+1)
 					}		
 				case FoundFile(owner: String, key: BigInt, hopcount: Int)=>
-					println("sender = " + myID + " owner = " +owner+ " hops = " + hopcount)
+					println("sender = " + myID + " owner = " +owner+ " pre = "+predecessor+" succ = "+fingertable(0)(1)+ " hops = " + hopcount)
+					// println("sender = " + myID + " " + sha1(myID) )
+					// println("owner = " + owner+ " " + sha1(owner) )
+					// println("pre = " + predecessor + " " + sha1(predecessor) )
+					// println("succ = " + fingertable(0)(1) + " " + sha1(fingertable(0)(1)) )
+					// println("key = " + key)
+
 			}
 		}
 
@@ -200,8 +244,9 @@ object project3 {
 		}
 
 		def convert2Hashvalue(id: String, i:Int): String = {
-			var key: BigInt = (sha1(id) + BigInt(((pow(2,i)).toInt).toString))
-			key = key.mod(BigInt(((pow(2,i)).toInt).toString))
+			var big1: BigInt = BigInt("1")
+			var key: BigInt = (sha1(id) + (big1 << i))
+			key = key.mod((big1 << 160)-big1)
 			key.toString
 		}
 
@@ -209,7 +254,7 @@ object project3 {
 			val md = MessageDigest.getInstance("SHA-1")
 			val bytes: Array[Byte] = md.digest(s.getBytes)
 			var sb: StringBuffer = new StringBuffer
-			var bi: BigInt = new BigInt(new java.math.BigInteger(bytes))
+			var bi: BigInt = new BigInt(new java.math.BigInteger(1,bytes))
 			return bi
 		}
 
@@ -225,6 +270,12 @@ object project3 {
 			sb.toString()
 		}
 
+		
+		// println("sharath = "+sha1("ip1"))
+		// for(i <- 0 until 161){
+		// 	println("second = "+ i+"  "+()+ "  "+BigInt(convert2Hashvalue("ip1",i)))
+		// }
+		
 
 
 		if(args.size!=2){
