@@ -12,6 +12,12 @@ object project3 {
 
 		case class AddNextNode(sender: String)
 		case class FindAverageHop(hopcount: Int)
+		case class UpdatePredecessor(update: String)
+		case class InitFingertable(i: Int)
+		case class SearchSuccessor(key: BigInt, i: Int, sender: String, hopcount: Int, msgType: Int) 
+		case class FoundSuccessor(succ: String, pre: String, i:Int, hopcount: Int, msgType: Int)
+		case class UpdateOthers(i: Int)
+		case class UpdateFingerTable(update: String, i: Int)
 
 		if(args.size!=2){
 			println("Enter valid number of inputs!!")
@@ -77,13 +83,6 @@ object project3 {
 					}
 			}
 		}
-
-		case class UpdatePredecessor(update: String)
-		case class InitFingertable(i: Int)
-		case class SearchSuccessor(key: BigInt, i: Int, sender: String, hopcount: Int, msgType: Int) 
-		case class FoundSuccessor(succ: String, pre: String, i:Int, hopcount: Int, msgType: Int)
-		case class UpdateOthers(i: Int)
-		case class UpdateFingerTable(update: String, i: Int)
 
 		class Node(myID: String, numOfRequests: Int, friend: String, masterRef:ActorRef) 
 			extends Actor{
